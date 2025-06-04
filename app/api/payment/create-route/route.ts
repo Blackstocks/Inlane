@@ -2,9 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabase } from '@/lib/supabaseClient';
 
+interface PaymentParams {
+  Amount: string;
+  BankId: string;
+  Currency: string;
+  Email: string;
+  FirstName: string;
+  MCC: string;
+  MerchantId: string;
+  MerchantTRID: string;
+  OrderInfo: string;
+  PassCode: string;
+  Phone: string;
+  ReturnURL: string;
+  TerminalId: string;
+  TxnRefNo: string;
+  TxnType: string;
+  Version: string;
+  SecureHash?: string;
+}
+
+interface RequestBody {
+  amount: number;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  userData: {
+    name: string;
+    phone: string;
+    email: string;
+    area: string;
+    custom_area?: string;
+    has_license: boolean;
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body: RequestBody = await request.json();
     const { amount, customerName, customerEmail, customerPhone, userData } = body;
 
     // First, save user data to database and get the ID
@@ -22,23 +57,23 @@ export async function POST(request: NextRequest) {
     const txnRefNo = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8)}`;
     
     // Prepare payment parameters (order matters for ICICI)
-    const paymentParams = {
+    const paymentParams: PaymentParams = {
       Amount: amount.toString(),
-      BankId: process.env.PAYMENT_BANK_ID,
+      BankId: process.env.PAYMENT_BANK_ID!,
       Currency: "356", // INR
       Email: customerEmail,
       FirstName: customerName,
-      MCC: process.env.PAYMENT_MCC,
-      MerchantId: process.env.PAYMENT_MERCHANT_ID,
+      MCC: process.env.PAYMENT_MCC!,
+      MerchantId: process.env.PAYMENT_MERCHANT_ID!,
       MerchantTRID: `MVTRN${Date.now()}`,
       OrderInfo: `Course_${savedUser.id}`,
-      PassCode: process.env.PAYMENT_PASS_CODE,
+      PassCode: process.env.PAYMENT_PASS_CODE!,
       Phone: customerPhone,
-      ReturnURL: process.env.PAYMENT_RETURN_URL,
-      TerminalId: process.env.PAYMENT_TERMINAL_ID,
+      ReturnURL: process.env.PAYMENT_RETURN_URL!,
+      TerminalId: process.env.PAYMENT_TERMINAL_ID!,
       TxnRefNo: txnRefNo,
-      TxnType: process.env.PAYMENT_TXN_TYPE,
-      Version: process.env.PAYMENT_VERSION
+      TxnType: process.env.PAYMENT_TXN_TYPE!,
+      Version: process.env.PAYMENT_VERSION!
     };
 
     // Generate secure hash
@@ -50,9 +85,9 @@ export async function POST(request: NextRequest) {
 
     // Prepare form data for gateway submission
     const formData = {
-      MerchantId: process.env.PAYMENT_MERCHANT_ID,
-      TerminalId: process.env.PAYMENT_TERMINAL_ID,
-      BankId: process.env.PAYMENT_BANK_ID,
+      MerchantId: process.env.PAYMENT_MERCHANT_ID!,
+      TerminalId: process.env.PAYMENT_TERMINAL_ID!,
+      BankId: process.env.PAYMENT_BANK_ID!,
       EncData: encData
     };
 
@@ -64,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      gatewayURL: process.env.PAYMENT_GATEWAY_URL,
+      gatewayURL: process.env.PAYMENT_GATEWAY_URL!,
       formData,
       txnRefNo,
       userId: savedUser.id
@@ -74,14 +109,14 @@ export async function POST(request: NextRequest) {
     console.error('Payment creation error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }
 
-function generateSecureHash(params: any): string {
+function generateSecureHash(params: PaymentParams): string {
   try {
-    const salt = process.env.PAYMENT_SALT_KEY;
+    const salt = process.env.PAYMENT_SALT_KEY!;
     // Sort keys alphabetically (excluding SecureHash)
     const sortedKeys = Object.keys(params).filter(key => key !== 'SecureHash').sort();
     
@@ -89,8 +124,9 @@ function generateSecureHash(params: any): string {
     let hashString = salt;
     
     for (const key of sortedKeys) {
-      if (params[key] && params[key] !== '') {
-        hashString += params[key];
+      const value = params[key as keyof PaymentParams];
+      if (value && value !== '') {
+        hashString += value;
       }
     }
     
@@ -103,17 +139,17 @@ function generateSecureHash(params: any): string {
   }
 }
 
-function encryptDataICICI(params: any): string {
+function encryptDataICICI(params: PaymentParams): string {
   try {
     // Create parameter string in ICICI format: key||value::key||value
     const paramString = Object.keys(params)
-      .map(key => `${key}||${params[key] || ''}`)
+      .map(key => `${key}||${params[key as keyof PaymentParams] || ''}`)
       .join('::');
     
     console.log('Parameter string to encrypt:', paramString.substring(0, 200) + '...');
     
     // Get encryption key and ensure it's 32 bytes
-    const encryptionKey = process.env.PAYMENT_ENC_KEY;
+    const encryptionKey = process.env.PAYMENT_ENC_KEY!;
     let key = Buffer.from(encryptionKey, 'hex');
     
     // Ensure key is exactly 32 bytes for AES-256
@@ -145,6 +181,6 @@ function encryptDataICICI(params: any): string {
     
   } catch (error) {
     console.error('Encryption error:', error);
-    throw new Error(`Encryption failed: ${error.message}`);
+    throw new Error(`Encryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

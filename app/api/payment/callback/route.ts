@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabase } from '@/lib/supabaseClient';
 
+interface PaymentResponse {
+  Amount?: string;
+  BankId?: string;
+  Currency?: string;
+  Email?: string;
+  FirstName?: string;
+  MCC?: string;
+  MerchantId?: string;
+  MerchantTRID?: string;
+  OrderInfo?: string;
+  PassCode?: string;
+  Phone?: string;
+  ReturnURL?: string;
+  TerminalId?: string;
+  TxnRefNo?: string;
+  TxnType?: string;
+  Version?: string;
+  SecureHash?: string;
+  ResponseCode?: string;
+  ResponseMessage?: string;
+  Message?: string;
+  RetRefNo?: string;
+  BankRefNo?: string;
+  [key: string]: string | undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('Callback received');
@@ -36,11 +62,11 @@ export async function POST(request: NextRequest) {
     // Determine success based on response code
     const isSuccess = decryptedData.ResponseCode === '00' || decryptedData.ResponseCode === '0';
     const redirectUrl = isSuccess 
-      ? process.env.PAYMENT_SUCCESS_URL 
-      : process.env.PAYMENT_FAILURE_URL;
+      ? process.env.PAYMENT_SUCCESS_URL! 
+      : process.env.PAYMENT_FAILURE_URL!;
 
     // Add query parameters for the frontend
-    const url = new URL(redirectUrl, process.env.NEXT_PUBLIC_BASE_URL);
+    const url = new URL(redirectUrl, process.env.NEXT_PUBLIC_BASE_URL!);
     url.searchParams.set('txnRefNo', decryptedData.TxnRefNo || '');
     url.searchParams.set('status', isSuccess ? 'success' : 'failed');
     url.searchParams.set('amount', decryptedData.Amount || '');
@@ -53,18 +79,18 @@ export async function POST(request: NextRequest) {
     console.error('Callback processing error:', error);
     
     // Redirect to failure page on error
-    const failureUrl = new URL(process.env.PAYMENT_FAILURE_URL, process.env.NEXT_PUBLIC_BASE_URL);
+    const failureUrl = new URL(process.env.PAYMENT_FAILURE_URL!, process.env.NEXT_PUBLIC_BASE_URL!);
     failureUrl.searchParams.set('error', 'processing_failed');
-    failureUrl.searchParams.set('message', error.message);
+    failureUrl.searchParams.set('message', error instanceof Error ? error.message : 'Unknown error');
     
     return NextResponse.redirect(failureUrl.toString());
   }
 }
 
-function decryptDataICICI(encData: string): any {
+function decryptDataICICI(encData: string): PaymentResponse {
   try {
     // Get encryption key
-    const encryptionKey = process.env.PAYMENT_ENC_KEY;
+    const encryptionKey = process.env.PAYMENT_ENC_KEY!;
     let key = Buffer.from(encryptionKey, 'hex');
     
     // Ensure key is exactly 32 bytes
@@ -91,7 +117,7 @@ function decryptDataICICI(encData: string): any {
     console.log('Decrypted string:', decrypted.substring(0, 200) + '...');
     
     // Parse the decrypted string (format: key||value::key||value)
-    const params = {};
+    const params: PaymentResponse = {};
     const pairs = decrypted.split('::');
     
     for (const pair of pairs) {
@@ -104,11 +130,11 @@ function decryptDataICICI(encData: string): any {
     return params;
   } catch (error) {
     console.error('Decryption error:', error);
-    throw new Error(`Decryption failed: ${error.message}`);
+    throw new Error(`Decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-function verifySecureHash(params: any): boolean {
+function verifySecureHash(params: PaymentResponse): boolean {
   try {
     const receivedHash = params.SecureHash;
     if (!receivedHash) {
@@ -132,22 +158,23 @@ function verifySecureHash(params: any): boolean {
   }
 }
 
-function generateSecureHash(params: any): string {
-  const salt = process.env.PAYMENT_SALT_KEY;
+function generateSecureHash(params: PaymentResponse): string {
+  const salt = process.env.PAYMENT_SALT_KEY!;
   const sortedKeys = Object.keys(params).filter(key => key !== 'SecureHash').sort();
   
   let hashString = salt;
   
   for (const key of sortedKeys) {
-    if (params[key] && params[key] !== '') {
-      hashString += params[key];
+    const value = params[key];
+    if (value && value !== '') {
+      hashString += value;
     }
   }
   
   return crypto.createHash('sha256').update(hashString).digest('hex').toUpperCase();
 }
 
-async function updatePaymentStatus(paymentData: any) {
+async function updatePaymentStatus(paymentData: PaymentResponse) {
   try {
     const orderId = paymentData.OrderInfo?.replace('Course_', '');
     

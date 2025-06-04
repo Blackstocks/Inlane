@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client"
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
@@ -226,7 +225,7 @@ export default function Home() {
     }
   }
 
-  const initiatePayment = async (userData: any) => {
+  const initiatePayment = async (userData: FormData) => {
     try {
       setPaymentInProgress(true)
       
@@ -261,7 +260,7 @@ export default function Home() {
     }
   }
 
-  const submitToPaymentGateway = (paymentData: any) => {
+  const submitToPaymentGateway = (paymentData: Record<string, any>) => {
     console.log('Submitting to payment gateway:', paymentData);
     
     // Create a form dynamically and submit to ICICI gateway
@@ -287,8 +286,6 @@ export default function Home() {
     console.log('Submitting form to:', form.action);
     form.submit();
   };
-  
-  
 
   if (paymentInProgress) {
     return (

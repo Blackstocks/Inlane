@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
+interface StatusParams {
+  MerchantId: string;
+  TerminalId: string;
+  TxnRefNo: string;
+  SecureHash?: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { txnRefNo } = await request.json();
@@ -10,9 +17,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare status check parameters
-    const statusParams = {
-      MerchantId: process.env.PAYMENT_MERCHANT_ID,
-      TerminalId: process.env.PAYMENT_TERMINAL_ID,
+    const statusParams: StatusParams = {
+      MerchantId: process.env.PAYMENT_MERCHANT_ID!,
+      TerminalId: process.env.PAYMENT_TERMINAL_ID!,
       TxnRefNo: txnRefNo
     };
 
@@ -27,7 +34,7 @@ export async function POST(request: NextRequest) {
     console.log('Status check request:', requestBody);
 
     // Make request to ICICI status API
-    const response = await fetch(process.env.PAYMENT_STATUS_GATEWAY, {
+    const response = await fetch(process.env.PAYMENT_STATUS_GATEWAY!, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -44,20 +51,21 @@ export async function POST(request: NextRequest) {
     console.error('Status check error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }
 
-function generateStatusHash(params: any): string {
-  const salt = process.env.PAYMENT_SALT_KEY;
+function generateStatusHash(params: StatusParams): string {
+  const salt = process.env.PAYMENT_SALT_KEY!;
   const sortedKeys = Object.keys(params).sort();
   
   let hashString = salt;
   
   for (const key of sortedKeys) {
-    if (params[key] && params[key] !== '') {
-      hashString += params[key];
+    const value = params[key as keyof StatusParams];
+    if (value && value !== '') {
+      hashString += value;
     }
   }
   
