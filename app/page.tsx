@@ -9,7 +9,7 @@ interface FormData {
   phone: string;
   email: string;
   area: string;
-  custom_area: string | null;
+  custom_area: string;
   has_license: boolean | null;
 }
 
