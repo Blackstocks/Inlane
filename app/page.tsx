@@ -259,6 +259,7 @@ export default function Home() {
       setPaymentInProgress(false)
     }
   }
+  
 
   const submitToPaymentGateway = (paymentData: Record<string, any>) => {
     console.log('Submitting to payment gateway:', paymentData);
