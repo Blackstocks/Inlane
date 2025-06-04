@@ -9,7 +9,7 @@ interface FormData {
   phone: string;
   email: string;
   area: string;
-  custom_area: string;
+  custom_area: string | null;
   has_license: boolean | null;
 }
 
@@ -203,12 +203,13 @@ export default function Home() {
     try {
       const cleanData = {
         name: formData.name.trim(),
-        phone: formData.phone.replace(/\D/g, ''), // Store only digits
+        phone: formData.phone.replace(/\D/g, ''),
         email: formData.email.trim().toLowerCase(),
         area: formData.area,
-        custom_area: formData.area === 'Other' ? formData.custom_area.trim() : null,
+        custom_area: formData.area === 'Other' ? formData.custom_area.trim() : '',
         has_license: formData.has_license
       }
+      
 
       console.log('Submitting data:', cleanData)
 
