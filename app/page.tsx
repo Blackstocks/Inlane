@@ -1,3 +1,4 @@
+// app/page.tsx
 "use client"
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
@@ -40,8 +41,10 @@ export default function Home() {
   const [submitted, setSubmitted] = useState<boolean>(false)
   const [showLicenseQ, setShowLicenseQ] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [paymentInProgress, setPaymentInProgress] = useState<boolean>(false)
 
   const serviceableAreas = ['HSR Layout', 'Koramangala', 'Electronic City']
+  const COURSE_AMOUNT = 1 // Fixed amount for the course
 
   // Email validation function - allows apostrophes
   const validateEmail = (email: string): boolean => {
@@ -197,17 +200,23 @@ export default function Home() {
 
       console.log('Submitting data:', cleanData)
 
-      const { data, error } = await supabase
-        .from('users')
-        .insert([cleanData])
-        .select()
-
-      if (error) {
-        console.error('Supabase error:', error)
-        alert(`Failed to submit: ${error.message}`)
+      // If user has license and is in serviceable area, initiate payment
+      if (formData.has_license === true && serviceableAreas.includes(formData.area)) {
+        await initiatePayment(cleanData)
       } else {
-        console.log('Success:', data)
-        setSubmitted(true)
+        // For users without license or outside serviceable areas, just save to database
+        const { data, error } = await supabase
+          .from('users')
+          .insert([cleanData])
+          .select()
+
+        if (error) {
+          console.error('Supabase error:', error)
+          alert(`Failed to submit: ${error.message}`)
+        } else {
+          console.log('Success:', data)
+          setSubmitted(true)
+        }
       }
     } catch (err) {
       console.error('Network error:', err)
@@ -215,6 +224,83 @@ export default function Home() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const initiatePayment = async (userData: any) => {
+    try {
+      setPaymentInProgress(true)
+      
+      // Create payment order
+      const response = await fetch('/api/payment/create-route', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: COURSE_AMOUNT,
+          customerName: userData.name,
+          customerEmail: userData.email,
+          customerPhone: userData.phone,
+          userData: userData // Pass user data to store in database
+        }),
+      })
+      
+      const paymentData = await response.json()
+      
+      if (paymentData.success) {
+        // Create form and submit to ICICI gateway
+        submitToPaymentGateway(paymentData)
+      } else {
+        alert('Failed to create payment order')
+        setPaymentInProgress(false)
+      }
+    } catch (error) {
+      console.error('Payment initiation failed:', error)
+      alert('Payment initiation failed')
+      setPaymentInProgress(false)
+    }
+  }
+
+  const submitToPaymentGateway = (paymentData: any) => {
+    console.log('Submitting to payment gateway:', paymentData);
+    
+    // Create a form dynamically and submit to ICICI gateway
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = paymentData.gatewayURL;
+    form.target = '_self';
+    
+    // Add form data exactly as returned from API
+    const fields = paymentData.formData;
+    
+    console.log('Form fields being submitted:', fields);
+    
+    Object.keys(fields).forEach(key => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = fields[key];
+      form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    console.log('Submitting form to:', form.action);
+    form.submit();
+  };
+  
+  
+
+  if (paymentInProgress) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#ecffbd] via-white to-[#d9ff7a] flex items-center justify-center px-1">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#00c281] mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-[#2e3cff] mb-2">Processing Payment</h2>
+          <p className="text-[#6257ff]">Please wait while we redirect you to the payment gateway...</p>
+          <p className="text-sm text-gray-600 mt-2">Amount: ₹{COURSE_AMOUNT}</p>
+        </div>
+      </div>
+    )
   }
 
   if (submitted) {
@@ -494,7 +580,7 @@ export default function Home() {
                         className="w-full px-3 lg:px-4 py-3 lg:py-4 mt-4 bg-gradient-to-r from-[#00c281] to-[#00ce84] text-white rounded-xl transition-all duration-300 transform hover:scale-105 hover:from-[#00ff91] hover:to-[#00c281] shadow-lg font-semibold animate-slide-up text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         style={{fontFamily: 'Glancyr Medium, sans-serif'}}
                       >
-                        {isLoading ? '⏳ Processing...' : '💳 Pay Now & Start Learning'}
+                        {isLoading ? '⏳ Processing...' : `💳 Pay ₹${COURSE_AMOUNT} & Start Learning`}
                       </button>
                     )}
 
