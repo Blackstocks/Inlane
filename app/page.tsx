@@ -21,6 +21,19 @@ interface ValidationErrors {
   custom_area: string;
 }
 
+interface PaymentGatewayData {
+  success: boolean;
+  gatewayURL: string;
+  formData: {
+    MerchantId: string;
+    TerminalId: string;
+    BankId: string;
+    EncData: string;
+  };
+  txnRefNo: string;
+  userId: string;
+}
+
 export default function Home() {
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -244,7 +257,7 @@ export default function Home() {
         }),
       })
       
-      const paymentData = await response.json()
+      const paymentData: PaymentGatewayData = await response.json()
       
       if (paymentData.success) {
         // Create form and submit to ICICI gateway
@@ -259,9 +272,8 @@ export default function Home() {
       setPaymentInProgress(false)
     }
   }
-  
 
-  const submitToPaymentGateway = (paymentData: Record<string, any>) => {
+  const submitToPaymentGateway = (paymentData: PaymentGatewayData) => {
     console.log('Submitting to payment gateway:', paymentData);
     
     // Create a form dynamically and submit to ICICI gateway
@@ -279,7 +291,7 @@ export default function Home() {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = key;
-      input.value = fields[key];
+      input.value = fields[key as keyof typeof fields];
       form.appendChild(input);
     });
     
