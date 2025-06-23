@@ -1,186 +1,172 @@
+// app/api/payment/create-route/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { supabase } from '@/lib/supabaseClient';
-
-interface PaymentParams {
-  Amount: string;
-  BankId: string;
-  Currency: string;
-  Email: string;
-  FirstName: string;
-  MCC: string;
-  MerchantId: string;
-  MerchantTRID: string;
-  OrderInfo: string;
-  PassCode: string;
-  Phone: string;
-  ReturnURL: string;
-  TerminalId: string;
-  TxnRefNo: string;
-  TxnType: string;
-  Version: string;
-  SecureHash?: string;
-}
-
-interface RequestBody {
-  amount: number;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  userData: {
-    name: string;
-    phone: string;
-    email: string;
-    area: string;
-    custom_area?: string;
-    has_license: boolean;
-  };
-}
+import { phiCommerceGateway } from '@/lib/paymentGateway';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: RequestBody = await request.json();
-    const { amount, customerName, customerEmail, customerPhone, userData } = body;
+    const body = await request.json();
+    console.log('Received payment request:', body);
 
-    // First, save user data to database and get the ID
-    const { data: savedUser, error } = await supabase
-      .from('users')
-      .insert([userData])
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Database error: ${error.message}`);
+    // Validate required fields
+    if (!body.amount || !body.customerName || !body.customerEmail) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Missing required fields: amount, customerName, customerEmail' 
+        },
+        { status: 400 }
+      );
     }
 
-    // Generate unique transaction reference
-    const txnRefNo = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8)}`;
-    
-    // Prepare payment parameters (order matters for ICICI)
-    const paymentParams: PaymentParams = {
-      Amount: amount.toString(),
-      BankId: process.env.PAYMENT_BANK_ID!,
-      Currency: "356", // INR
-      Email: customerEmail,
-      FirstName: customerName,
-      MCC: process.env.PAYMENT_MCC!,
-      MerchantId: process.env.PAYMENT_MERCHANT_ID!,
-      MerchantTRID: `MVTRN${Date.now()}`,
-      OrderInfo: `Course_${savedUser.id}`,
-      PassCode: process.env.PAYMENT_PASS_CODE!,
-      Phone: customerPhone,
-      ReturnURL: process.env.PAYMENT_RETURN_URL!,
-      TerminalId: process.env.PAYMENT_TERMINAL_ID!,
-      TxnRefNo: txnRefNo,
-      TxnType: process.env.PAYMENT_TXN_TYPE!,
-      Version: process.env.PAYMENT_VERSION!
+    // Validate amount
+    const amount = parseFloat(body.amount);
+    if (isNaN(amount) || amount <= 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Invalid amount' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get the base URL for return URL
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                   `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+
+    const paymentRequest = {
+      amount: amount,
+      customerName: body.customerName,
+      customerEmail: body.customerEmail,
+      customerPhone: body.customerPhone || '',
+      returnUrl: `${baseUrl}/payment/callback`
     };
 
-    // Generate secure hash
-    const secureHash = generateSecureHash(paymentParams);
-    paymentParams.SecureHash = secureHash;
+    console.log('Initiating payment with PhiCommerce:', paymentRequest);
 
-    // Encrypt the data using ICICI format
-    const encData = encryptDataICICI(paymentParams);
+    const result = await phiCommerceGateway.initiatePayment(paymentRequest);
 
-    // Prepare form data for gateway submission
-    const formData = {
-      MerchantId: process.env.PAYMENT_MERCHANT_ID!,
-      TerminalId: process.env.PAYMENT_TERMINAL_ID!,
-      BankId: process.env.PAYMENT_BANK_ID!,
-      EncData: encData
-    };
+    console.log('PhiCommerce result:', result);
 
-    console.log('Payment request prepared:', {
-      txnRefNo,
-      userId: savedUser.id,
-      amount: amount.toString()
-    });
-
-    return NextResponse.json({
-      success: true,
-      gatewayURL: process.env.PAYMENT_GATEWAY_URL!,
-      formData,
-      txnRefNo,
-      userId: savedUser.id
-    });
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        transactionId: result.transactionId,
+        redirectUrl: result.redirectUrl
+      });
+    } else {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: result.error 
+        },
+        { status: 400 }
+      );
+    }
 
   } catch (error) {
     console.error('Payment creation error:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Internal server error' 
+      },
+      { status: 500 }
+    );
   }
 }
 
-function generateSecureHash(params: PaymentParams): string {
+// app/api/payment/callback/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
   try {
-    const salt = process.env.PAYMENT_SALT_KEY!;
-    // Sort keys alphabetically (excluding SecureHash)
-    const sortedKeys = Object.keys(params).filter(key => key !== 'SecureHash').sort();
+    const searchParams = request.nextUrl.searchParams;
     
-    // Create hash string starting with salt
-    let hashString = salt;
+    // Extract parameters from the callback URL
+    const responseCode = searchParams.get('responseCode');
+    const merchantTxnNo = searchParams.get('merchantTxnNo');
+    const amount = searchParams.get('amount');
+    const txnDate = searchParams.get('txnDate');
+    const secureHash = searchParams.get('secureHash');
     
-    for (const key of sortedKeys) {
-      const value = params[key as keyof PaymentParams];
-      if (value && value !== '') {
-        hashString += value;
-      }
+    console.log('Payment callback received:', {
+      responseCode,
+      merchantTxnNo,
+      amount,
+      txnDate,
+      secureHash
+    });
+
+    // Determine success/failure based on response code
+    const isSuccess = responseCode === 'R1000' || responseCode === 'SUCCESS';
+    
+    if (isSuccess) {
+      // Redirect to success page with transaction details
+      const successUrl = new URL('/payment/success', request.url);
+      successUrl.searchParams.set('transactionId', merchantTxnNo || '');
+      successUrl.searchParams.set('amount', amount || '');
+      
+      return NextResponse.redirect(successUrl);
+    } else {
+      // Redirect to failure page with error details
+      const failureUrl = new URL('/payment/failure', request.url);
+      failureUrl.searchParams.set('transactionId', merchantTxnNo || '');
+      failureUrl.searchParams.set('error', responseCode || 'Payment failed');
+      
+      return NextResponse.redirect(failureUrl);
     }
-    
-    console.log('Hash string length:', hashString.length);
-    
-    return crypto.createHash('sha256').update(hashString).digest('hex').toUpperCase();
+
   } catch (error) {
-    console.error('Hash generation error:', error);
-    throw new Error('Failed to generate secure hash');
+    console.error('Payment callback error:', error);
+    
+    // Redirect to failure page on error
+    const failureUrl = new URL('/payment/failure', request.url);
+    failureUrl.searchParams.set('error', 'Callback processing failed');
+    
+    return NextResponse.redirect(failureUrl);
   }
 }
 
-function encryptDataICICI(params: PaymentParams): string {
+export async function POST(request: NextRequest) {
+  // Handle POST callback if needed
+  return GET(request);
+}
+
+// app/api/payment/status/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { phiCommerceGateway } from '@/lib/paymentGateway';
+
+export async function POST(request: NextRequest) {
   try {
-    // Create parameter string in ICICI format: key||value::key||value
-    const paramString = Object.keys(params)
-      .map(key => `${key}||${params[key as keyof PaymentParams] || ''}`)
-      .join('::');
-    
-    console.log('Parameter string to encrypt:', paramString.substring(0, 200) + '...');
-    
-    // Get encryption key and ensure it's 32 bytes
-    const encryptionKey = process.env.PAYMENT_ENC_KEY!;
-    let key = Buffer.from(encryptionKey, 'hex');
-    
-    // Ensure key is exactly 32 bytes for AES-256
-    if (key.length !== 32) {
-      if (key.length < 32) {
-        // Pad with zeros if too short
-        const padding = Buffer.alloc(32 - key.length);
-        key = Buffer.concat([key, padding]);
-      } else {
-        // Truncate if too long
-        key = key.slice(0, 32);
-      }
+    const body = await request.json();
+    console.log('Status check request:', body);
+
+    if (!body.transactionId || !body.amount) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Missing required fields: transactionId, amount' 
+        },
+        { status: 400 }
+      );
     }
-    
-    // Use static IV of zeros (common for ICICI integrations)
-    const iv = Buffer.alloc(16, 0);
-    
-    // Create cipher
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-    cipher.setAutoPadding(true);
-    
-    // Encrypt the data
-    let encrypted = cipher.update(paramString, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
-    
-    console.log('Encryption successful, encrypted length:', encrypted.length);
-    
-    return encrypted;
-    
+
+    const result = await phiCommerceGateway.checkTransactionStatus(
+      body.transactionId,
+      body.amount
+    );
+
+    return NextResponse.json(result);
+
   } catch (error) {
-    console.error('Encryption error:', error);
-    throw new Error(`Encryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('Status check error:', error);
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Internal server error' 
+      },
+      { status: 500 }
+    );
   }
 }
