@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Image from "next/image";
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 // --- Car Preloader Component ---
 function CarPreloader() {
