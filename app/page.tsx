@@ -207,14 +207,8 @@ function MainForm() {
     }
   };
 
-  const initiatePayment = async (userData: {
-    name: string;
-    phone: string;
-    email: string;
-    area: string;
-    custom_area: string;
-    has_license: boolean | null;
-  }) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const initiatePayment = async () => {
     try {
       setPaymentInProgress(true);
       setTimeout(() => {
