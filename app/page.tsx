@@ -92,8 +92,8 @@ function MainForm() {
   const COURSE_AMOUNT = 1;
 
   // Validation functions
-  const validateEmail = (email) =>
-    /^[a-zA-Z0-9._%+'"-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
+  const validateEmail = (email: string): boolean => /^[a-zA-Z0-9._%+'"-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
+
   const validatePhone = (phone) => {
     const cleanPhone = phone.replace(/\D/g, "");
     return cleanPhone.length === 10 && /^[6-9]\d{9}$/.test(cleanPhone);
