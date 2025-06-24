@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Image from "next/image";
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+
 
 // --- Car Preloader Component ---
 function CarPreloader() {
@@ -199,6 +199,7 @@ function MainForm() {
         if (error) alert(`Failed to submit: ${error.message}`);
         else setSubmitted(true);
       }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       alert("Network error. Please check your connection and try again.");
     } finally {
@@ -206,7 +207,14 @@ function MainForm() {
     }
   };
 
-  const initiatePayment = async (userData) => {
+  const initiatePayment = async (userData: {
+    name: string;
+    phone: string;
+    email: string;
+    area: string;
+    custom_area: string;
+    has_license: boolean | null;
+  }) => {
     try {
       setPaymentInProgress(true);
       setTimeout(() => {
@@ -250,7 +258,7 @@ function MainForm() {
             Thank You!
           </h1>
           <p className="text-gray-700 mb-4 text-center">
-            Thank you for trusting us to be your driving buddy. We’ll get in touch soon to start your driving journey.
+            Thank you for trusting us to be your driving buddy. We&apos;ll get in touch soon to start your driving journey.
           </p>
           <div className="flex gap-2 text-sm text-gray-500">
             <a href="https://inlane.in/terms-and-conditions" className="hover:text-[#00c281]">Terms & Conditions</a>
@@ -289,7 +297,7 @@ function MainForm() {
             By Your Side, Every Ride
           </h1>
           <p className="text-gray-700 text-center text-sm">
-            Turning nervous starts into confident strides – India’s first online driving school
+            Turning nervous starts into confident strides &ndash; India&apos;s first online driving school
           </p>
         </div>
         <div className="space-y-4">
@@ -378,7 +386,7 @@ function MainForm() {
                 </p>
               )}
               <p className="text-xs text-[#00c281] mt-1">
-                ⚠️ We are currently not serving this location. Please fill out the form, and we’ll get back to you as soon as possible!
+                ⚠️ We are currently not serving this location. Please fill out the form, and we&apos;ll get back to you as soon as possible!
               </p>
             </>
           )}
