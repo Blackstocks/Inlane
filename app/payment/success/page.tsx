@@ -1,5 +1,5 @@
-// app/payment/success/page.tsx
 'use client';
+// app/payment/success/page.tsx
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
