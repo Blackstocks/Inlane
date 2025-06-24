@@ -54,7 +54,7 @@ export default function PaymentFailure() {
         </h1>
         
         <p className="text-gray-600 mb-6">
-          We couldn't process your payment. Please try again.
+          We couldn&apos;t process your payment. Please try again.
         </p>
 
         {/* Error Details */}
@@ -69,6 +69,8 @@ export default function PaymentFailure() {
                 </span>
               </div>
             )}
+            {/* bug fixed
+             */}
             {amount && (
               <div className="flex justify-between">
                 <span className="text-red-600">Amount:</span>
